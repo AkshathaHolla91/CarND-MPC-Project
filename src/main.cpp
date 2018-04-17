@@ -99,6 +99,8 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          double delta=j[1]["steering_angle"];
+          double a=j[1]["steering_angle"];
           cout<<"px "<<px<<" py "<<py<<endl;
           /*
           * TODO: Calculate steering angle and throttle using MPC.
@@ -118,9 +120,20 @@ int main() {
           double cte=polyeval(coeffs,0);
           double epsi=-atan(calculate_derivative(coeffs,0));
           
+          double latency=0.1;
+          const double Lf = 2.67;
+          double latency_x=0.0+ v *cos(0.0)*latency;
+          double latency_y=0.0+v*sin(0.0)*latency;
+          double latency_psi=0.0+(v/Lf)* -delta* latency;
+          double latency_v=v+a*latency;
+          double latency_cte=cte+v*sin(epsi)*latency;
+          double latency_epsi=epsi+(v/Lf)*-delta*latency;
             
           Eigen::VectorXd state(6);
-          state<< 0, 0, 0, v, cte, epsi;
+          //Without latency added
+          //state<< 0, 0, 0, v, cte, epsi;
+          
+          state<<latency_x,latency_y,latency_psi,latency_v,latency_cte,latency_epsi;
           
           auto vars=mpc.Solve(state,coeffs);
           

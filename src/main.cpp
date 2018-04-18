@@ -31,7 +31,7 @@ string hasData(string s) {
   }
   return "";
 }
-
+//Calculating derivative of third degree polynomial
 double calculate_derivative(Eigen::VectorXd coeffs, double x) {
   double result = 0.0;
   for (int i = 1; i < coeffs.size(); i++) {
@@ -103,13 +103,14 @@ int main() {
           double a=j[1]["throttle"];
           cout<<"px "<<px<<" py "<<py<<endl;
           /*
-          * TODO: Calculate steering angle and throttle using MPC.
+          *Calculate steering angle and throttle using MPC.
           *
           * Both are in between [-1, 1].
           *
           */
           Eigen::VectorXd ptsx_car_co_ord(ptsx.size());
           Eigen::VectorXd ptsy_car_co_ord(ptsy.size());
+          //Converting to car co-ordinates
           for(int i=0;i<ptsx.size();i++){
             double x_diff=ptsx[i]-px;
             double y_diff=ptsy[i]-py;
@@ -119,7 +120,8 @@ int main() {
           Eigen::VectorXd coeffs=polyfit(ptsx_car_co_ord,ptsy_car_co_ord,3);
           double cte=polyeval(coeffs,0);
           double epsi=-atan(calculate_derivative(coeffs,0));
-          
+
+          //Using model update equations to account for latency of 100ms
           double latency=0.1;
           const double Lf = 2.67;
           double latency_x=0.0+ v *cos(0.0)*latency;
@@ -136,13 +138,13 @@ int main() {
           state<<latency_x,latency_y,latency_psi,latency_v,latency_cte,latency_epsi;
           
           auto vars=mpc.Solve(state,coeffs);
-          
+          // Divide by deg2rad(25) before you send the steering value back.
+          // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
           double steer_value = -vars[0]/(deg2rad(25));
           double throttle_value = vars[1];
 
           json msgJson;
-          // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
-          // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
+          
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = throttle_value;
 

@@ -38,71 +38,59 @@ Self-Driving Car Engineer Nanodegree Program
 3. Compile: `cmake .. && make`
 4. Run it: `./mpc`.
 
-## Tips
+## Reflection
 
-1. It's recommended to test the MPC on basic examples to see if your implementation behaves as desired. One possible example
-is the vehicle starting offset of a straight line (reference). If the MPC implementation is correct, after some number of timesteps
-(not too many) it should find and track the reference line.
-2. The `lake_track_waypoints.csv` file has the waypoints of the lake track. You could use this to fit polynomials and points and see of how well your model tracks curve. NOTE: This file might be not completely in sync with the simulator so your solution should NOT depend on it.
-3. For visualization this C++ [matplotlib wrapper](https://github.com/lava/matplotlib-cpp) could be helpful.)
-4.  Tips for setting up your environment are available [here](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/0949fca6-b379-42af-a919-ee50aa304e6a/lessons/f758c44c-5e40-4e01-93b5-1a82aa4e044f/concepts/23d376c7-0195-4276-bdf0-e02f1f3c665d)
-5. **VM Latency:** Some students have reported differences in behavior using VM's ostensibly a result of latency.  Please let us know if issues arise as a result of a VM environment.
+Model predictive control reframes the task of following a trajectory as an optimization problem. Model predictive control involves simulating different actuator inputs, predicting the resulting trajectory and selecting trajectory with the minimum cost. Here the selected trajectory is used to simulate the movement of the car in the simulator to ensure that it mimics the reference trajectory path.
 
-## Editor Settings
+The data which is provided by the simulator are as follows
 
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
+* ptsx (Array) - The global x positions of the waypoints.
+* ptsy (Array) - The global y positions of the waypoints. Thiscorresponds to the z coordinate in Unity since y is the up-down direction.
+* psi (float) - The orientation of the vehicle in radians converted from the Unity format to the standard format expected in most mathemetical functions (more details below).
+* psi_unity (float) - The orientation of the vehicle in radians. This is an orientation commonly used in navigation.
+* x (float) - The global x position of the vehicle.
+* y (float) - The global y position of the vehicle.
+* steering_angle (float) - The current steering angle in radians.
+* throttle (float) - The current throttle value [-1, 1].
+* speed (float) - The current velocity in mph.
 
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
+Here we also have to consider a latency of 100 ms of the actuators of the car while calculating the trajectory.
 
-## Code Style
+##### Set N and dt and convert waypoints to car co-ordinates
+The first step in the model is to set the N(number of timesteps) to 25 and the time interval between 2 time steps dt as 0.05 so that we can predict the trajectory for the next 1.25 seconds as a starting point. The waypoints that are provided( ptsx and ptsy arrays) are first converted to vehicle co-ordinates by subtracting px and py from each value in the arrays to adjust the position according to that of the vehicle(ie. translation is performed). Further the waypoint co-ordinates are changed using the homogeneous transformation matrix to calculate the waypoints in terms of vehicle co-ordinates using the following equations(Rotation).
 
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
+* ptsx_car_co_ord[i]=x_diff* cos(-psi) - y_diff* sin(-psi);
+* ptsy_car_co_ord[i]=x_diff* sin(-psi) + y_diff*cos(-psi);
 
-## Project Instructions and Rubric
 
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
+##### Fit polynomial to waypoints and calculate cte and epsi
+The next step in the model is to fit the transformed waypoints to a third degree polynomial using the polyfit to obtain the path/trajectory that is to be followed by the vehicle. Since the points have been converted to vehicle co-ordinates the x, y and psi values can be considered at the origin ie zero  initially and further the cross track error is calculated by using the polyeval function which takes the coefficients returned by the polyfit function and the current x value and subtracts the current y from it. The orientation error epsi is calculated by taking the difference of the psi  and arctan  of the first derivative of the third degree polynomial calculated. The values of x, y and psi are substituted and the values are calculated accordingly.
 
-More information is only accessible by people who are already enrolled in Term 2
-of CarND. If you are enrolled, see [the project page](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/f1820894-8322-4bb3-81aa-b26b3c6dcbaf/lessons/b1ff3be0-c904-438e-aad3-2b5379f0e0c3/concepts/1a2255a0-e23c-44cf-8d41-39b8a3c8264a)
-for instructions and the project rubric.
+##### MPC solve
+The calculated coefficients and the state vector is then passed to the solve function in which the  variables (which includes the state size, actuators, and timesteps) are first set to zero except the first variable, which is set to the respective value from the current state. The variables then have upper and lower boundaries set for their values.  The delta(Steering angle) is limitted between - 25 to 25 degrees (in radians) and the a ie throttle is limitted within the values  -1 to 1. After setting all the contraints and bounds the operator function of the FG eval class performs the cost additions and state value calculations as mentioned below. The updated state vector along with the variables(with constraints and bounds)are passed to the ipopt solver to produce the future predictions for the x, y , delta and acceleration values.
 
-## Hints!
+##### FGeval- Adding cost and calculating state values for N time steps
 
-* You don't have to follow this directory structure, but if you do, your work
-  will span all of the .cpp files here. Keep an eye out for TODOs.
+The next step is to minimize the cross track errors, orientation error and  velocity error , which can be done by adding these parameters to the cost fg[0] as seen in line 57-59 of MPC.cpp
 
-## Call for IDE Profiles Pull Requests
+ A further enhancement is to constrain erratic control inputs. In order to do this we add the steering angle and acceleration also to the cost  to ensure smoother turns and proper change in acceleration. We can further add the difference between consecutive steering angles and orientations to the cost to make the trajectory smoother and avoid radical changes. 
 
-Help your fellow students!
 
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to we ensure
-that students don't feel pressured to use one IDE or another.
+ After adding cost the next step would be to calculate each of the parameters in the state vector for the next N timesteps in the FG eval class.
 
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
 
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
+##### Dealing with effects of latency
 
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
+To account for the latency of 100ms between the actuator calculation and  when the state is actually reached and additional step was added to predict the state of the vehicle with a dt(latency) of 100ms using the model update equations as seen in line  keepin the values of x, y and psi as 0 (assuming to be at the origin of vehicle co-ordinates).This state was used to make future predictions instead of the older values(the ones without considering the latency) and was passed to the solve function to predict future states and actuator values.
 
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
+##### Tuning
 
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
+The values provided in the classroom sessions ie N and dt of 25 and 0.05 was working well for a reference velocity of 40km/hr. In order to further increase the speed of the vehicle and still ensure that the vehicle follows the right trajectory without taking sharp turns, I added an additional weight of 100 to the sequential steering angle difference component of the cost. This did not give very good results at higher speeds and indicated that the weights had to be increased further and hence I tried 300 and 500 and found that a weight of 500 gave better results. Later I also added weights to the individual steering angle component of the cost to ensure smoother turns which led to good results at a reference velocity of 50km/hr.I also tried adding weights to the cte, epsi and velocity cost comonents with little success hence I went back to keeping them at 1. Further I also tried varying the time steps and time interval N and dt to further optimize the performance by changing the dt to 0.1 and keeping the timesteps at 25 led to a prediction for 2.5 seconds with very less intermediate points and hence could not handle the turns properly and went off the track. Later I reduced the time steps to 20 and the time interval to 0.06 to get predictions for the next 1.2 seconds which seemed to work well with the tuned values.
 
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+
+ 
+
+
+
+
+
